@@ -7,6 +7,8 @@ const nodemailer = require('nodemailer');
 const passport = require('passport');
 const _ = require('lodash');
 const User = require('../models/User');
+const prettyjson = require('prettyjson');
+
 
 const util = require('util')
 , mqtt = require('mqtt')

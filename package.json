@@ -75,6 +75,7 @@
     "paypal-rest-sdk": "^1.8.1",
     "phone": "^2.3.10",
     "popper.js": "^1.14.7",
+    "prettyjson": "^1.2.1",
     "pug": "^2.0.3",
     "request": "^2.88.0",
     "sentence-case": "^2.1.1",
