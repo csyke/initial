@@ -60,7 +60,7 @@ block content
           td= device.PhoneNumber
           td= device.Rider.dataValues.PhoneNumber
           td
-            form(action='/account/delete', method='POST', onsubmit="return confirm('Are you sure you want to delete your account?');")
+            form(action='/mpesa/request/'+device.Rider.dataValues.PhoneNumber, method='POST')
               .form-group
                 input(type='hidden', name='_csrf', value=_csrf)
                 .offset-sm-3.col-md-7.pl-2

@@ -147,6 +147,8 @@ app.get('/contact', contactController.getContact);
 app.post('/contact', contactController.postContact);
 app.get('/account', passportConfig.isAuthenticated, userController.getAccount);
 app.get('/devices', passportConfig.isAuthenticated, userController.getDevices);
+app.post('/mpesa/request/:fromNumber', passportConfig.isAuthenticated, userController.postMpesaRequest);
+app.post('/mpesa/transactions', passportConfig.isAuthenticated, userController.postMpesaTransactions);
 app.post('/account/profile', passportConfig.isAuthenticated, userController.postUpdateProfile);
 app.post('/devices', passportConfig.isAuthenticated, userController.postNewDevice);
 app.post('/devices/delete/:IMEI', passportConfig.isAuthenticated, userController.postDeleteDevice);

@@ -10,6 +10,8 @@ const User = require('../models/User');
 
 const util = require('util')
 , mqtt = require('mqtt')
+, axios = require('axios')
+,btoa = require('btoa-lite')
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -41,6 +43,71 @@ exports.getLogin = (req, res) => {
   res.render('account/login', {
     title: 'Login'
   });
+};
+
+
+exports.postMpesaRequest = async (req, res) => {
+  let fromNumber = req.body.fromNumber
+  
+  let basicAuth = 'Basic ' + btoa(process.env.MPESAUSER + ':' + process.env.MPESAPASS);
+  // let [err, care] = await to(axios.get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',  {}, {
+  //   headers: { 'Authorization': + basicAuth }
+  // }))
+  let [err, care] = await to(axios({
+    method:'get',
+    url:'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
+    auth: {
+        username: process.env.MPESAUSER,
+        password: process.env.MPESAPASS
+    }
+}))
+  // console.log(care.data)
+  // assumes no error
+  let token = care.data.access_token
+  console.log(care.data)
+  console.log(token)
+  ;[err, care] = await to(axios({
+    method:'post',
+    url:'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
+    headers: {Authorization: `Bearer ${token}`},
+    data: {
+      "BusinessShortCode":"174379",
+      "Password":"MTc0Mzc5YmZiMjc5ZjlhYTliZGJjZjE1OGU5N2RkNzFhNDY3Y2QyZTBjODkzMDU5YjEwZjc4ZTZiNzJhZGExZWQyYzkxOTIwMTkwMzI3MjAyOTMw",
+      "Timestamp": "20190327202930",
+      "TransactionType":"CustomerPayBillOnline",
+      "Amount":"1",
+      "PartyA":"254706662011",
+      "PartyB": "174379",
+      "PhoneNumber": "254706662011",
+      "TransactionDesc": "test",
+      "AccountReference":"test",
+      "Remarks":"Some Remark",
+      "CallBackURL":"https://forward-mpesa.cseco.co.ke/mpesa/transactions",
+      "ResultURL":"https://forward-mpesa.cseco.co.ke/mpesa/transactions/",
+      "QueueTimeOutURL":"https://forward-mpesa.cseco.co.ke/mpesa/transactions/"
+    } 
+}))
+  res.redirect('/devices', {
+    title: 'Devices'
+  });
+};
+
+exports.postMpesaTransactions = async (req, res) => {
+  
+  console.log('-----------Received M-Pesa webhook-----------');
+
+  // format and dump the request payload recieved from safaricom in the terminal
+  console.log(prettyjson.render(req.body, options));
+  console.log('-----------------------');
+
+  let message = {
+          "ResponseCode": "00000000",
+          "ResponseDesc": "success"
+        };
+
+  // respond to safaricom servers with a success message
+  res.json(message);
+
 };
 
 /**
