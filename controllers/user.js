@@ -89,9 +89,7 @@ exports.postMpesaRequest = async (req, res) => {
       "QueueTimeOutURL":"https://forward-mpesa.cseco.co.ke/mpesa/transactions/"
     } 
 }))
-  res.redirect('/devices', {
-    title: 'Devices'
-  });
+  res.redirect('/devices');
 };
 
 exports.postMpesaTransactions = async (req, res) => {
