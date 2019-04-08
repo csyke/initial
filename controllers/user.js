@@ -1,11 +1,34 @@
-const { promisify } = require('util');
+
+const {
+  promisify
+} = require('util');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const passport = require('passport');
 const _ = require('lodash');
 const User = require('../models/User');
 
-const randomBytesAsync = promisify(crypto.randomBytes);
+const util = require('util')
+, mqtt = require('mqtt')
+const dotenv = require('dotenv');
+
+dotenv.config();
+
+client = mqtt.connect(process.env.BROKER, {
+  username: process.env.MQTT_USER,
+  password: process.env.MQTT_PASSWORD,
+})
+
+
+const randomBytesAsync = promisify(crypto.randomBytes),
+  path = require('path'),
+  {
+    sequelize
+  } = require(path.join(__dirname, "../apps/csystem")).models,
+  mysql = require('mysql'),
+  phone = require('phone'),
+  to = require('await-to-js').to
+  , globalConfig = require(path.join(__dirname,'/../config/config.system'));
 
 /**
  * GET /login
@@ -27,7 +50,9 @@ exports.getLogin = (req, res) => {
 exports.postLogin = (req, res, next) => {
   req.assert('email', 'Email is not valid').isEmail();
   req.assert('password', 'Password cannot be blank').notEmpty();
-  req.sanitize('email').normalizeEmail({ gmail_remove_dots: false });
+  req.sanitize('email').normalizeEmail({
+    gmail_remove_dots: false
+  });
 
   const errors = req.validationErrors();
 
@@ -37,14 +62,20 @@ exports.postLogin = (req, res, next) => {
   }
 
   passport.authenticate('local', (err, user, info) => {
-    if (err) { return next(err); }
+    if (err) {
+      return next(err);
+    }
     if (!user) {
       req.flash('errors', info);
       return res.redirect('/login');
     }
     req.logIn(user, (err) => {
-      if (err) { return next(err); }
-      req.flash('success', { msg: 'Success! You are logged in.' });
+      if (err) {
+        return next(err);
+      }
+      req.flash('success', {
+        msg: 'Success! You are logged in.'
+      });
       res.redirect(req.session.returnTo || '/');
     });
   })(req, res, next);
@@ -80,14 +111,65 @@ exports.getSignup = (req, res) => {
  * POST /signup
  * Create a new local account.
  */
-exports.postSignup = (req, res, next) => {
+exports.postSignup = async (req, res, next) => {
+  let rephone = /\+2547[01249]{1}/
+  let matchphone = rephone.exec(req.body.tel);
+  if (!req.body.type || req.body.type === 0 || req.body.type === '0') {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'type',
+        msg: 'Please choose account type.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/signup');
+  }
+  console.log(req.body)
+  if (!req.body.location || req.body.location === '') {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'location',
+        msg: 'Please select your location.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/signup');
+  }
+
+  if (!(phone(req.body.tel).length)) {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'tel',
+        msg: 'Please enter a valid phone number.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/signup');
+  }
+
+  if (!matchphone || !(matchphone.length)) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'plate',
+      msg: 'Phone number must be a safaricom number.',
+      value: '0'
+    }]);
+    return res.redirect('/signup');
+  }
+
+
+  //req.flash('errors', errors);
   req.assert('email', 'Email is not valid').isEmail();
   req.assert('password', 'Password must be at least 4 characters long').len(4);
   req.assert('confirmPassword', 'Passwords do not match').equals(req.body.password);
-  req.sanitize('email').normalizeEmail({ gmail_remove_dots: false });
+  req.sanitize('email').normalizeEmail({
+    gmail_remove_dots: false
+  });
 
   const errors = req.validationErrors();
-
   if (errors) {
     req.flash('errors', errors);
     return res.redirect('/signup');
@@ -95,21 +177,84 @@ exports.postSignup = (req, res, next) => {
 
   const user = new User({
     email: req.body.email,
-    password: req.body.password
+    password: req.body.password,
   });
 
-  User.findOne({ email: req.body.email }, (err, existingUser) => {
-    if (err) { return next(err); }
+  let [err, care] = [];
+
+  switch (req.body.type) {
+    case 'Owner':
+      [err, care] = await to(sequelize.models.Owner.findOne({
+        where: {
+          PhoneNumber: req.body.tel
+        }
+      }))
+      if (care) {
+        req.flash('errors', {
+          msg: 'Owner with that phone number already exists.'
+        });
+        return res.redirect('/signup');
+      }
+      break;
+    case 'Rider':
+      [err, care] = await to(sequelize.models.Rider.findOne({
+        where: {
+          PhoneNumber: req.body.tel
+        }
+      }))
+      if (care) {
+        req.flash('errors', {
+          msg: 'Rider with that phone number already exists.'
+        });
+        return res.redirect('/signup');
+      }
+      break;
+  }
+
+  User.findOne({
+    email: req.body.email
+  }, (err, existingUser) => {
+    if (err) {
+      return next(err);
+    }
     if (existingUser) {
-      req.flash('errors', { msg: 'Account with that email address already exists.' });
+      req.flash('errors', {
+        msg: 'Account with that email address already exists.'
+      });
       return res.redirect('/signup');
     }
     user.save((err) => {
-      if (err) { return next(err); }
+      if (err) {
+        return next(err);
+      }
       req.logIn(user, (err) => {
         if (err) {
           return next(err);
         }
+        let userid = user._id.toString()
+        let phoneNumber = user.phone
+        console.log(req.body)
+        let [lat,long] = req.body.location.split(',')
+        switch (req.body.type) {
+          case 'Owner':
+            sequelize.models.Owner.create({
+              'uid': userid,
+              'PhoneNumber': req.body.tel,
+              'latitude':lat,
+              'longitude':long
+            })
+            break;
+          case 'Rider':
+            sequelize.models.Rider.create({
+              'uid': userid,
+              'PhoneNumber': req.body.tel,
+              'latitude':lat,
+              'longitude':long
+            })
+            break;
+        }
+
+
         res.redirect('/');
       });
     });
@@ -120,6 +265,167 @@ exports.postSignup = (req, res, next) => {
  * GET /account
  * Profile page.
  */
+exports.getDevices = async (req, res) => {
+  let userid = req.user._id.toString();
+  let [err, care] = await to(sequelize.models.Owner.findOne({
+    where: {
+      uid: userid
+    }
+  }))
+  if (err || care === null) {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'tel',
+        msg: 'You are not allowed to access that page because you may not be registered as an owner.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/');
+  }
+
+  ;
+  [err, care] = await to(sequelize.models.Device.findAll({
+    where: {
+      OwnerUid: userid
+    },
+    include: [{
+      model: sequelize.models.Rider,
+    }]
+  }))
+  let devices = [];
+  for (let i in care) devices.push(care[i].dataValues)
+  res.render('account/devices', {
+    title: 'Devices',
+    devices: devices
+  });
+};
+
+exports.postDeleteDevice = async (req, res) => {
+  let userid = req.user._id.toString();
+  let [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      IMEI: req.params.IMEI
+    },
+    include: [{
+      model: sequelize.models.Owner,
+      where: {
+        uid: userid
+      }
+    }]
+  }))
+  if (err || care === null) {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'tel',
+        msg: 'It seems that that device does not belong to you.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/devices');
+  }
+
+  ;
+  [err, care] = await to(sequelize.models.Device.destroy({
+    where: {
+      IMEI: req.params.IMEI
+    },
+  }))
+  res.redirect('/devices');
+};
+exports.postStart = async (req, res) => {
+  let userid = req.user._id.toString();
+  let [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      IMEI: req.params.IMEI
+    },
+    include: [{
+      model: sequelize.models.Owner,
+      where: {
+        uid: userid
+      }
+    }]
+  }))
+  if (err || care === null) {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'tel',
+        msg: 'It seems that that device does not belong to you.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/devices');
+  }
+
+  ;
+  [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      IMEI: req.params.IMEI
+    },
+  }))
+  let tel = care.dataValues.PhoneNumber
+  tel = tel.replace('+', '');
+  let topic = `csymapp-sms/${tel}`
+  console.log(topic)
+  client.publish(topic, `resume123456`)
+  ;
+  [err, care] = await to(sequelize.models.Device.update({Status:'on'},{
+    where: {
+      IMEI: req.params.IMEI
+    },
+  }))
+  res.redirect('/devices');
+};
+exports.postStop = async (req, res) => {
+  let userid = req.user._id.toString();
+  let [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      IMEI: req.params.IMEI
+    },
+    include: [{
+      model: sequelize.models.Owner,
+      where: {
+        uid: userid
+      }
+    }]
+  }))
+  if (err || care === null) {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'tel',
+        msg: 'It seems that that device does not belong to you.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/devices');
+  }
+
+  ;
+  [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      IMEI: req.params.IMEI
+    },
+  }))
+  let tel = care.dataValues.PhoneNumber
+  tel = tel.replace('+', '');
+  let topic = `csymapp-sms/${tel}`
+  console.log(topic)
+  client.publish(topic, `noquickstop123456`)
+  ;
+  [err, care] = await to(sequelize.models.Device.update({Status:'off'},{
+    where: {
+      IMEI: req.params.IMEI
+    },
+  }))
+  res.redirect('/devices');
+};
+
+
+
+
 exports.getAccount = (req, res) => {
   res.render('account/profile', {
     title: 'Account Management'
@@ -132,7 +438,9 @@ exports.getAccount = (req, res) => {
  */
 exports.postUpdateProfile = (req, res, next) => {
   req.assert('email', 'Please enter a valid email address.').isEmail();
-  req.sanitize('email').normalizeEmail({ gmail_remove_dots: false });
+  req.sanitize('email').normalizeEmail({
+    gmail_remove_dots: false
+  });
 
   const errors = req.validationErrors();
 
@@ -142,7 +450,9 @@ exports.postUpdateProfile = (req, res, next) => {
   }
 
   User.findById(req.user.id, (err, user) => {
-    if (err) { return next(err); }
+    if (err) {
+      return next(err);
+    }
     user.email = req.body.email || '';
     user.profile.name = req.body.name || '';
     user.profile.gender = req.body.gender || '';
@@ -151,15 +461,228 @@ exports.postUpdateProfile = (req, res, next) => {
     user.save((err) => {
       if (err) {
         if (err.code === 11000) {
-          req.flash('errors', { msg: 'The email address you have entered is already associated with an account.' });
+          req.flash('errors', {
+            msg: 'The email address you have entered is already associated with an account.'
+          });
           return res.redirect('/account');
         }
         return next(err);
       }
-      req.flash('success', { msg: 'Profile information has been updated.' });
+      req.flash('success', {
+        msg: 'Profile information has been updated.'
+      });
       res.redirect('/account');
     });
   });
+};
+
+
+
+
+
+// new device
+exports.postNewDevice = async (req, res, next) => {
+  let rephone = /\+2547[01249]{1}/
+  let matchphone = rephone.exec(req.body.ridertel);
+
+  if (!(phone(req.body.tel).length)) {
+    req.flash('errors', [{
+        location: 'body',
+        param: 'tel',
+        msg: 'Please enter a valid phone number for the device.',
+        value: '0'
+      }]
+
+    );
+    return res.redirect('/devices');
+  }
+  if (!(phone(req.body.ridertel).length)) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'ridertel',
+      msg: 'Please enter a valid phone number for the rider.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+  // Number plate
+  let re = /KM[A-Za-z]{2}[0-9]{3}[A-Za-z]{1}/
+  let match = re.exec(req.body.plate);
+  if (!match || !(match.length)) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'plate',
+      msg: 'Please enter a valid number plate for your motorcycle.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+
+  // we will have to check this from a different place....
+  if (!(phone(req.body.ridertel).length)) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'ridertel',
+      msg: 'Please enter a valid phone number for the rider.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+
+  if (!matchphone || !(matchphone.length)) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'plate',
+      msg: 'Rider number has to be a safaricom number.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+
+  let [err, care] = await to(sequelize.models.Rider.findOne({
+    where: {
+      PhoneNumber: req.body.ridertel
+    }
+  }))
+  if (err || care === null) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'ridertel',
+      msg: 'Rider is not registered. Please register rider first.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+
+  let riderid = care.dataValues.uid
+
+  ;
+  [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      PhoneNumber: req.body.tel
+    }
+  }))
+  if (care) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'tel',
+      msg: 'A device is already registered with that phone number.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  };
+  [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      IMEI: req.body.IMEI
+    }
+  }))
+  if (care) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'IMEI',
+      msg: 'A device is already registered with that IMEI.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+   
+let pool = require('./database')
+; [err, care] = await to(pool.query(`SELECT 1 IMEI from tc_devices where uniqueid=${req.body.IMEI}`)) 
+if(err)throw err
+if(!(care.length)) {
+  req.flash('errors', [{
+    location: 'body',
+    param: 'IMEI',
+    msg: 'Please register device in traccar first.',
+    value: '0'
+  }]);
+  return res.redirect('/devices');
+}
+
+  // connection.connect();
+
+  // connection.query(`SELECT 1 IMEI from tc_devices where uniqueid=${req.body.IMEI}`, function (error, results, fields) {
+  //   if (error) {
+  //     console.log(error)
+  //     throw error;
+  //   }
+  //   // `results` is an array with one element for every statement in the query:
+  //   console.log(results[0]); // [{1: 1}]
+  //   console.log(results[1]); // [{2: 2}]
+  // });
+
+  ;
+  [err, care] = await to(sequelize.models.Device.findOne({
+    where: {
+      Plate: req.body.plate
+    }
+  }))
+  if (care) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'IMEI',
+      msg: 'A device is already registered with that number plate.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  };
+  [err, care] = await to(sequelize.models.Device.findOne({
+
+    // where: 'cow',
+    include: [{
+      model: sequelize.models.Rider,
+      where: {
+        PhoneNumber: req.body.ridertel
+      }
+    }]
+
+  }))
+
+  if (care) {
+    req.flash('errors', [{
+      location: 'body',
+      param: 'ridertel',
+      msg: 'That rider is already working for someone else.',
+      value: '0'
+    }]);
+    return res.redirect('/devices');
+  }
+
+  let userid = req.user._id.toString();;
+  [err, care] = await to(sequelize.models.Device.create({
+    IMEI: req.body.IMEI,
+    PhoneNumber: req.body.tel,
+    RiderUid: riderid,
+    OwnerUid: userid,
+    Plate: req.body.plate
+  }))
+  // return
+  //+254706662011
+  // check if the rider is registered...
+
+  req.flash('success', {
+    msg: 'Device registered.'
+  });
+  res.redirect('/devices');
+  // User.findById(req.user.id, (err, user) => {
+  //   if (err) { return next(err); }
+  //   user.email = req.body.email || '';
+  //   user.profile.name = req.body.name || '';
+  //   user.profile.gender = req.body.gender || '';
+  //   user.profile.location = req.body.location || '';
+  //   user.profile.website = req.body.website || '';
+  //   user.save((err) => {
+  //     if (err) {
+  //       if (err.code === 11000) {
+  //         req.flash('errors', { msg: 'The email address you have entered is already associated with an account.' });
+  //         return res.redirect('/account');
+  //       }
+  //       return next(err);
+  //     }
+  //     req.flash('success', { msg: 'Profile information has been updated.' });
+  //     res.redirect('/account');
+  //   });
+  // });
 };
 
 /**
@@ -178,11 +701,17 @@ exports.postUpdatePassword = (req, res, next) => {
   }
 
   User.findById(req.user.id, (err, user) => {
-    if (err) { return next(err); }
+    if (err) {
+      return next(err);
+    }
     user.password = req.body.password;
     user.save((err) => {
-      if (err) { return next(err); }
-      req.flash('success', { msg: 'Password has been changed.' });
+      if (err) {
+        return next(err);
+      }
+      req.flash('success', {
+        msg: 'Password has been changed.'
+      });
       res.redirect('/account');
     });
   });
@@ -193,10 +722,24 @@ exports.postUpdatePassword = (req, res, next) => {
  * Delete user account.
  */
 exports.postDeleteAccount = (req, res, next) => {
-  User.deleteOne({ _id: req.user.id }, (err) => {
-    if (err) { return next(err); }
+  let userid = req.user._id.toString();
+  User.deleteOne({
+    _id: req.user.id
+  }, (err) => {
+    if (err) {
+      return next(err);
+    }
+    
+     sequelize.models.Owner.destroy({
+      where: {uid: userid}
+    })
+     sequelize.models.Rider.destroy({
+      where: {uid: userid}
+    })
     req.logout();
-    req.flash('info', { msg: 'Your account has been deleted.' });
+    req.flash('info', {
+      msg: 'Your account has been deleted.'
+    });
     res.redirect('/');
   });
 };
@@ -206,9 +749,13 @@ exports.postDeleteAccount = (req, res, next) => {
  * Unlink OAuth provider.
  */
 exports.getOauthUnlink = (req, res, next) => {
-  const { provider } = req.params;
+  const {
+    provider
+  } = req.params;
   User.findById(req.user.id, (err, user) => {
-    if (err) { return next(err); }
+    if (err) {
+      return next(err);
+    }
     user[provider.toLowerCase()] = undefined;
     const tokensWithoutProviderToUnlink = user.tokens.filter(token =>
       token.kind !== provider.toLowerCase());
@@ -216,19 +763,23 @@ exports.getOauthUnlink = (req, res, next) => {
     // As a result, we need to verify that unlinking the provider is safe by ensuring
     // that another login method exists.
     if (
-      !(user.email && user.password)
-      && tokensWithoutProviderToUnlink.length === 0
+      !(user.email && user.password) &&
+      tokensWithoutProviderToUnlink.length === 0
     ) {
       req.flash('errors', {
-        msg: `The ${_.startCase(_.toLower(provider))} account cannot be unlinked without another form of login enabled.`
-          + ' Please link another account or add an email address and password.'
+        msg: `The ${_.startCase(_.toLower(provider))} account cannot be unlinked without another form of login enabled.` +
+          ' Please link another account or add an email address and password.'
       });
       return res.redirect('/account');
     }
     user.tokens = tokensWithoutProviderToUnlink;
     user.save((err) => {
-      if (err) { return next(err); }
-      req.flash('info', { msg: `${_.startCase(_.toLower(provider))} account has been unlinked.` });
+      if (err) {
+        return next(err);
+      }
+      req.flash('info', {
+        msg: `${_.startCase(_.toLower(provider))} account has been unlinked.`
+      });
       res.redirect('/account');
     });
   });
@@ -243,12 +794,18 @@ exports.getReset = (req, res, next) => {
     return res.redirect('/');
   }
   User
-    .findOne({ passwordResetToken: req.params.token })
+    .findOne({
+      passwordResetToken: req.params.token
+    })
     .where('passwordResetExpires').gt(Date.now())
     .exec((err, user) => {
-      if (err) { return next(err); }
+      if (err) {
+        return next(err);
+      }
       if (!user) {
-        req.flash('errors', { msg: 'Password reset token is invalid or has expired.' });
+        req.flash('errors', {
+          msg: 'Password reset token is invalid or has expired.'
+        });
         return res.redirect('/forgot');
       }
       res.render('account/reset', {
@@ -274,26 +831,34 @@ exports.postReset = (req, res, next) => {
 
   const resetPassword = () =>
     User
-      .findOne({ passwordResetToken: req.params.token })
-      .where('passwordResetExpires').gt(Date.now())
-      .then((user) => {
-        if (!user) {
-          req.flash('errors', { msg: 'Password reset token is invalid or has expired.' });
-          return res.redirect('back');
-        }
-        user.password = req.body.password;
-        user.passwordResetToken = undefined;
-        user.passwordResetExpires = undefined;
-        return user.save().then(() => new Promise((resolve, reject) => {
-          req.logIn(user, (err) => {
-            if (err) { return reject(err); }
-            resolve(user);
-          });
-        }));
-      });
+    .findOne({
+      passwordResetToken: req.params.token
+    })
+    .where('passwordResetExpires').gt(Date.now())
+    .then((user) => {
+      if (!user) {
+        req.flash('errors', {
+          msg: 'Password reset token is invalid or has expired.'
+        });
+        return res.redirect('back');
+      }
+      user.password = req.body.password;
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      return user.save().then(() => new Promise((resolve, reject) => {
+        req.logIn(user, (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(user);
+        });
+      }));
+    });
 
   const sendResetPasswordEmail = (user) => {
-    if (!user) { return; }
+    if (!user) {
+      return;
+    }
     let transporter = nodemailer.createTransport({
       service: 'SendGrid',
       auth: {
@@ -309,7 +874,9 @@ exports.postReset = (req, res, next) => {
     };
     return transporter.sendMail(mailOptions)
       .then(() => {
-        req.flash('success', { msg: 'Success! Your password has been changed.' });
+        req.flash('success', {
+          msg: 'Success! Your password has been changed.'
+        });
       })
       .catch((err) => {
         if (err.message === 'self signed certificate in certificate chain') {
@@ -326,18 +893,24 @@ exports.postReset = (req, res, next) => {
           });
           return transporter.sendMail(mailOptions)
             .then(() => {
-              req.flash('success', { msg: 'Success! Your password has been changed.' });
+              req.flash('success', {
+                msg: 'Success! Your password has been changed.'
+              });
             });
         }
         console.log('ERROR: Could not send password reset confirmation email after security downgrade.\n', err);
-        req.flash('warning', { msg: 'Your password has been changed, however we were unable to send you a confirmation email. We will be looking into it shortly.' });
+        req.flash('warning', {
+          msg: 'Your password has been changed, however we were unable to send you a confirmation email. We will be looking into it shortly.'
+        });
         return err;
       });
   };
 
   resetPassword()
     .then(sendResetPasswordEmail)
-    .then(() => { if (!res.finished) res.redirect('/'); })
+    .then(() => {
+      if (!res.finished) res.redirect('/');
+    })
     .catch(err => next(err));
 };
 
@@ -360,7 +933,9 @@ exports.getForgot = (req, res) => {
  */
 exports.postForgot = (req, res, next) => {
   req.assert('email', 'Please enter a valid email address.').isEmail();
-  req.sanitize('email').normalizeEmail({ gmail_remove_dots: false });
+  req.sanitize('email').normalizeEmail({
+    gmail_remove_dots: false
+  });
 
   const errors = req.validationErrors();
 
@@ -374,20 +949,26 @@ exports.postForgot = (req, res, next) => {
 
   const setRandomToken = token =>
     User
-      .findOne({ email: req.body.email })
-      .then((user) => {
-        if (!user) {
-          req.flash('errors', { msg: 'Account with that email address does not exist.' });
-        } else {
-          user.passwordResetToken = token;
-          user.passwordResetExpires = Date.now() + 3600000; // 1 hour
-          user = user.save();
-        }
-        return user;
-      });
+    .findOne({
+      email: req.body.email
+    })
+    .then((user) => {
+      if (!user) {
+        req.flash('errors', {
+          msg: 'Account with that email address does not exist.'
+        });
+      } else {
+        user.passwordResetToken = token;
+        user.passwordResetExpires = Date.now() + 3600000; // 1 hour
+        user = user.save();
+      }
+      return user;
+    });
 
   const sendForgotPasswordEmail = (user) => {
-    if (!user) { return; }
+    if (!user) {
+      return;
+    }
     const token = user.passwordResetToken;
     let transporter = nodemailer.createTransport({
       service: 'SendGrid',
@@ -407,7 +988,9 @@ exports.postForgot = (req, res, next) => {
     };
     return transporter.sendMail(mailOptions)
       .then(() => {
-        req.flash('info', { msg: `An e-mail has been sent to ${user.email} with further instructions.` });
+        req.flash('info', {
+          msg: `An e-mail has been sent to ${user.email} with further instructions.`
+        });
       })
       .catch((err) => {
         if (err.message === 'self signed certificate in certificate chain') {
@@ -424,11 +1007,15 @@ exports.postForgot = (req, res, next) => {
           });
           return transporter.sendMail(mailOptions)
             .then(() => {
-              req.flash('info', { msg: `An e-mail has been sent to ${user.email} with further instructions.` });
+              req.flash('info', {
+                msg: `An e-mail has been sent to ${user.email} with further instructions.`
+              });
             });
         }
         console.log('ERROR: Could not send forgot password email after security downgrade.\n', err);
-        req.flash('errors', { msg: 'Error sending the password reset message. Please try again shortly.' });
+        req.flash('errors', {
+          msg: 'Error sending the password reset message. Please try again shortly.'
+        });
         return err;
       });
   };

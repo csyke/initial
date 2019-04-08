@@ -1,0 +1,115 @@
+extends ../layout
+
+block content
+  script(src='https://npmcdn.com/leaflet@1.0.0-rc.2/dist/leaflet.js')
+  script(src='/js/OpenLayers.js')
+  .pb-2.mt-2.mb-4.border-bottom
+    h3 Your Devices
+
+  .pb-2.mt-2.mb-4.border-bottom
+    h3 Create New Device
+
+  form(action='/devices', method='POST')
+    input(type='hidden', name='_csrf', value=_csrf)
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='IMEI') IMEI
+      .col-md-7
+        input.form-control(type='text', name='IMEI', id='IMEI', autocomplete='IMEI' required)
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='tel') Phone Number
+      .col-md-7
+        input.form-control(type='tel', name='tel', id='tel', autocomplete='Phone Number' required)
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='plate') Number Plate
+      .col-md-7
+        input.form-control(type='plate', name='plate', id='plate', autocomplete='Number Plate' required)
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='riderrel') Rider Number
+      .col-md-7
+        input.form-control(type='ridertel', name='ridertel', id='ridertel', autocomplete='Rider Number' required)
+    //- .form-group.row
+    //-    label.col-md-3.col-form-label.font-weight-bold.text-right(for='plate') Rider Number
+    //-    .col-md-7
+    //-      select(name="Rider").col-md-7
+    //-       each rider in riders
+    //-         option(value=rider.PhoneNumber) #{rider.PhoneNumber}
+    .form-group
+      .offset-sm-3.col-md-7.pl-2
+        button.btn.btn-primary(type='submit')
+          i.fas.fa-lock.fa-sm
+          | Create Device
+
+  .pb-2.mt-2.mb-4.border-bottom
+    h3 Registered Devices
+    
+  table.table.table-hover.table-bordered
+    thead
+      tr
+        th IMEI
+        th Plate
+        th Phone Number
+        th Rider Number
+        th Payment
+        th Action
+        th Start/Stop
+    tbody
+      for device in devices
+        tr
+          td= device.IMEI
+          td= device.Plate
+          td= device.PhoneNumber
+          td= device.Rider.dataValues.PhoneNumber
+          td
+            form(action='/account/delete', method='POST', onsubmit="return confirm('Are you sure you want to delete your account?');")
+              .form-group
+                input(type='hidden', name='_csrf', value=_csrf)
+                .offset-sm-3.col-md-7.pl-2
+                  button.btn.btn-primary(type='submit')
+                   i.fa.fa-money.fa-sm
+                   | Require Payment
+          td
+            form(action='/devices/delete/'+device.IMEI, method='POST', onsubmit="return confirm('Are you sure you want to delete this device?');")
+              .form-group
+                input(type='hidden', name='_csrf', value=_csrf)
+                .offset-sm-3.col-md-7.pl-2
+                  button.btn.btn-danger(type='submit')
+                   i.fas.fa-trash-alt.fa-sm
+                   | Delete
+          td
+            if device.Status === 'on'
+              form(action='/devices/stop/'+device.IMEI, method='POST')
+                .form-group
+                  input(type='hidden', name='_csrf', value=_csrf)
+                  .offset-sm-3.col-md-7.pl-2
+                    button.btn.btn-danger(type='submit')
+                     | Stop
+            else
+              form(action='/devices/start/'+device.IMEI, method='POST')
+                .form-group
+                  input(type='hidden', name='_csrf', value=_csrf)
+                  .offset-sm-3.col-md-7.pl-2
+                    button.btn.btn-primary(type='submit')
+                     | Start
+  div#demoMap(style="height:250px")
+  script.
+    var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    var osm = new L.TileLayer(osmUrl, {minZoom:2, maxZoom:19});		
+
+    var googleStreets = new L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{minZoom:1, maxZoom:19, subdomains:['mt0','mt1','mt2','mt3']});
+
+    var googleSat = new L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{minZoom:1, maxZoom: 21,subdomains:['mt0','mt1','mt2','mt3']});
+
+    var map = new L.Map('demoMap', { doubleClickZoom:true, zoomControl:true, maxBounds:([[90,-270],[-90,270]]) });
+
+    L.control.layers({"OSM (Mapnik)": osm, "Google Street": googleStreets, "Google Earth": googleSat}).addTo(map);
+
+    var layerGroup = L.layerGroup().addTo(map);
+
+    map.addLayer(osm);
+    var map_set = "osm";
+    map.fitBounds([[0,-180],[0,180]]);
+    map.panTo(new L.LatLng(-1.28333, 36.81667));
+    //- map.setZoom(4);
+    //- map.panTo(new L.LatLng(-1.28333, 36.81667));
+
+    map.on('click', function(e){onMapClick(e, L, map, layerGroup)});

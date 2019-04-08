@@ -6,10 +6,22 @@ html
     meta(name='viewport', content='width=device-width, initial-scale=1.0')
     meta(name='theme-color' content='#4DA5F4')
     meta(name='csrf-token', content=_csrf)
-    title #{title} - Hackathon Starter
+    title #{title} - BodaBoda Monitor
     link(rel='shortcut icon', href='/favicon.png')
+    link(rel='stylesheet', href='https://npmcdn.com/leaflet@1.0.0-rc.2/dist/leaflet.css')
     link(rel='stylesheet', href='/css/main.css')
     script(src='/js/lib/Chart.min.js')
+    style.
+      #demoMap {
+        position: relative;
+        z-index:1;
+        top:0; 
+        bottom:0; 
+        right:0; 
+        left:0; 
+        overflow:hidden; 
+        background-color:grey;
+      }
 
   body
     include partials/header

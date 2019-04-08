@@ -20,7 +20,14 @@ const expressStatusMonitor = require('express-status-monitor');
 const sass = require('node-sass-middleware');
 const multer = require('multer');
 
-const upload = multer({ dest: path.join(__dirname, 'uploads') });
+const upload = multer({ dest: path.join(__dirname, 'uploads') }),
+to = require('await-to-js').to
+, fse = require('fs-extra')
+
+
+
+const csystem = require(__dirname+'/apps/csystem').csystem
+const csErroHandler = require(__dirname+'/apps/csystem').csErrors
 
 /**
  * Load environment variables from .env file, where API keys and passwords are configured.
@@ -139,7 +146,12 @@ app.post('/signup', userController.postSignup);
 app.get('/contact', contactController.getContact);
 app.post('/contact', contactController.postContact);
 app.get('/account', passportConfig.isAuthenticated, userController.getAccount);
+app.get('/devices', passportConfig.isAuthenticated, userController.getDevices);
 app.post('/account/profile', passportConfig.isAuthenticated, userController.postUpdateProfile);
+app.post('/devices', passportConfig.isAuthenticated, userController.postNewDevice);
+app.post('/devices/delete/:IMEI', passportConfig.isAuthenticated, userController.postDeleteDevice);
+app.post('/devices/start/:IMEI', passportConfig.isAuthenticated, userController.postStart);
+app.post('/devices/stop/:IMEI', passportConfig.isAuthenticated, userController.postStop);
 app.post('/account/password', passportConfig.isAuthenticated, userController.postUpdatePassword);
 app.post('/account/delete', passportConfig.isAuthenticated, userController.postDeleteAccount);
 app.get('/account/unlink/:provider', passportConfig.isAuthenticated, userController.getOauthUnlink);
@@ -243,12 +255,63 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+
+
+{
+	let routes = {};
+	console.log("Loading routes...")
+
+  	/*
+	 * read all folders in ../routes
+	 * 		go to their models folders and load all the models
+	 */
+	fse
+	.readdirSync(__dirname+"/routes")
+	.forEach((folda)=>{
+		let routeFilePath = path.join(__dirname,"/routes", folda)
+		fse
+		.readdirSync(routeFilePath)
+		.filter((file) =>
+			// all js files in folder
+			file.split(".")[file.split(".").length-1] === "js"
+		)
+		.forEach((file)=>{
+			let routename = file.split(".")[0];
+            console.log("%s %s %s", chalk.green('✓'), chalk.green('✓'), routename);	
+            routeFilePath = path.join(routeFilePath, file);
+            routes[routename] = routeFilePath;
+            new (require(routeFilePath)) (app)
+		})
+		
+		
+	})
+}
+
 /**
  * Start Express server.
  */
-app.listen(app.get('port'), () => {
-  console.log('%s App is running at http://localhost:%d in %s mode', chalk.green('✓'), app.get('port'), app.get('env'));
-  console.log('  Press CTRL-C to stop\n');
-});
+// app.listen(app.get('port'), () => {
+//   console.log('%s App is running at http://localhost:%d in %s mode', chalk.green('✓'), app.get('port'), app.get('env'));
+//   console.log('  Press CTRL-C to stop\n');
+// });
+
+let start_server = async () => {
+  let csystem_ = new csystem
+  let [err, care, dontcare] = [];
+  [err, dontcare] = await to(csystem_.dbSync(false));
+  if(err) {
+    console.log(`Db error: ${err}`)
+    process.exit(1);
+  }
+  /**
+   * Start Express server.
+   */
+  app.listen(app.get('port'), () => {
+    console.log('%s App is running at http://localhost:%d in %s mode', chalk.green('✓'), app.get('port'), app.get('env')); 
+    console.log('  Press CTRL-C to stop\n');
+  });
+}
+
+start_server();
 
 module.exports = app;

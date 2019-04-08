@@ -1,6 +1,7 @@
 extends ../layout
-
 block content
+  script(src='https://npmcdn.com/leaflet@1.0.0-rc.2/dist/leaflet.js')
+  script(src='/js/OpenLayers.js')
   .pb-2.mt-2.mb-4.border-bottom
     h3 Sign up
   form(id='signup-form', method='POST')
@@ -9,6 +10,22 @@ block content
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='email') Email
       .col-md-7
         input.form-control(type='email', name='email', id='email', placeholder='Email', autofocus, autocomplete='email', required)
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='tel') Mobile
+      .col-md-7
+        input.form-control(type='text', name='tel', id='tel', placeholder='Mobile', autofocus, autocomplete='tel', required)
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='location') Location
+      .col-md-7
+        input.form-control(type='text', name='location', id='location', placeholder='Location', autofocus, autocomplete='location', required)
+    div#demoMap(style="height:250px")
+    .form-group.row
+      label.col-md-3.col-form-label.font-weight-bold.text-right(for='type') Account Type
+      .col-md-7
+        select(name="type").col-md-7
+          option(value='0') -- Select --
+          option(value='Owner') Owner
+          option(value='Rider') Rider
     .form-group.row
       label.col-md-3.col-form-label.font-weight-bold.text-right(for='password') Password
       .col-md-7
@@ -21,3 +38,75 @@ block content
       button.btn.btn-success(type='submit')
         i.fas.fa-user-plus.fa-sm
         | Signup
+    script.
+      //map = new OpenLayers.Map("demoMap");
+      //map.addLayer(new OpenLayers.Layer.OSM());
+      //map.zoomToMaxExtent();
+     // map.setCenter({lat:52.5159, lng:13.3777});
+      //map.setZoom(40);
+      //- map.setCenter(["52.5159", "13.3777"], 4);
+     // map.setCenter(["52.5159", "13.3777"]);
+      //- map.Zoom(14);
+
+      function onMapClick(e, L, map, layerGroup) {
+        var lat  = e.latlng.lat.toFixed(5);
+        var lon  = e.latlng.lng.toFixed(5);
+        //- map.markers.clearLayers();
+        //- L.marker([lat, lon]).addTo(map);
+        layerGroup.clearLayers();
+        L.marker([lat, lon]).addTo(layerGroup);
+        
+        document.getElementById("location").value = lat+','+lon
+        var gps = "";
+        if (lat>0) gps+='N'; else gps+='S';
+        if (10>Math.abs(lat))  gps += "0";
+        gps += Math.abs(lat).toFixed(5)+" ";
+        if (lon>0) gps+='E'; else gps+='W';
+        if (10>Math.abs(lon))  gps += "0";
+        if (100>Math.abs(lon)) gps += "0";
+        gps += Math.abs(lon).toFixed(5);
+        var textArea = document.createElement("textarea");
+        textArea.style.position = 'fixed';
+        textArea.style.top = 0;
+        textArea.style.left = 0;
+        textArea.style.width = '2em';
+        textArea.style.height = '2em';
+        textArea.style.padding = 0;
+        textArea.style.border = 'none';
+        textArea.style.outline = 'none';
+        textArea.style.boxShadow = 'none';
+        textArea.style.background = 'transparent';
+        textArea.value = gps;
+        document.body.appendChild(textArea);
+        textArea.select();
+        //- try {
+        //-   var successful = document.execCommand('copy');
+        //-   var msg = successful ? 'Successfully' : 'Unsuccessfully';
+        //-   console.log(msg + ' copied ' + gps + ' to clipboard ');
+        //- } catch (err) {
+        //-   console.log('Oops, unable to copy');
+        //- }
+        document.body.removeChild(textArea);
+        
+      }
+      var osmUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      var osm = new L.TileLayer(osmUrl, {minZoom:2, maxZoom:19});		
+
+      var googleStreets = new L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{minZoom:1, maxZoom:19, subdomains:['mt0','mt1','mt2','mt3']});
+
+      var googleSat = new L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{minZoom:1, maxZoom: 21,subdomains:['mt0','mt1','mt2','mt3']});
+
+      var map = new L.Map('demoMap', { doubleClickZoom:true, zoomControl:true, maxBounds:([[90,-270],[-90,270]]) });
+
+      L.control.layers({"OSM (Mapnik)": osm, "Google Street": googleStreets, "Google Earth": googleSat}).addTo(map);
+
+      var layerGroup = L.layerGroup().addTo(map);
+
+      map.addLayer(osm);
+      var map_set = "osm";
+      map.fitBounds([[0,-180],[0,180]]);
+      map.panTo(new L.LatLng(-1.28333, 36.81667));
+      //- map.setZoom(4);
+      //- map.panTo(new L.LatLng(-1.28333, 36.81667));
+
+      map.on('click', function(e){onMapClick(e, L, map, layerGroup)});
