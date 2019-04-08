@@ -102,6 +102,7 @@ exports.postMpesaTransactions = async (req, res) => {
   const options = {
     // noColor: true
   };
+  console.log(req.body)
   console.log(prettyjson.render(req.body, options));
   console.log('-----------------------');
 
