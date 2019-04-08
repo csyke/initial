@@ -99,6 +99,9 @@ exports.postMpesaTransactions = async (req, res) => {
   console.log('-----------Received M-Pesa webhook-----------');
 
   // format and dump the request payload recieved from safaricom in the terminal
+  const options = {
+    // noColor: true
+  };
   console.log(prettyjson.render(req.body, options));
   console.log('-----------------------');
 
