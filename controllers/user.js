@@ -63,7 +63,7 @@ exports.postMpesaRequest = async (req, res) => {
         password: process.env.MPESAPASS
     }
 }))
-  // console.log(care.data)
+  console.log(error)
   // assumes no error
   let token = care.data.access_token
   console.log(care.data)
